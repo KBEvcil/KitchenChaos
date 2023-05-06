@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 1265191719565581649}
   - component: {fileID: -5333029288362061922}
   - component: {fileID: -1131026963056542269}
+  - component: {fileID: -2928447698537072025}
   m_Layer: 0
   m_Name: CheeseSlices
   m_TagString: Untagged
@@ -63,6 +64,18 @@ MonoBehaviour:
   AlwaysReplicateAsRoot: 0
   DontDestroyWithOwner: 0
   AutoObjectParentSync: 1
+--- !u!114 &-2928447698537072025
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6872902699525432228}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c745203fd30cf724aac95fc232513bca, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1001 &2893902923825441147
 PrefabInstance:
   m_ObjectHideFlags: 0
