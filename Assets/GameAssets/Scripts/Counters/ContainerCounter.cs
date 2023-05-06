@@ -15,6 +15,7 @@ public class ContainerCounter : BaseCounter
         if(!player.HasKitchenObject())
         {
             KitchenObject.SpawnKitchenObject(kitchenObjectSO, player);
+
             InteractLogicServerRpc();
         }
     }
