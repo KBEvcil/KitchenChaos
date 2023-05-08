@@ -29,7 +29,9 @@ public class Player : NetworkBehaviour, IKitchenObjectParent
 
     [SerializeField] private float moveSpeed = 7f;
     [SerializeField] private LayerMask countersLayerMask;
+    [SerializeField] private LayerMask collisonsLayerMask;
     [SerializeField] private Transform kitchenObjectHoldPoint;
+    [SerializeField] private List<Vector3> spawnPositionList;
 
     private Vector3 lastInteractionDir;
     private bool isWalking;
@@ -47,6 +49,8 @@ public class Player : NetworkBehaviour, IKitchenObjectParent
     {
         if (IsOwner)
             LocalInstance = this;
+
+        transform.position = spawnPositionList[(int)OwnerClientId];
 
         OnAnyPlayerSpawned?.Invoke(this, EventArgs.Empty);
     }
@@ -87,14 +91,13 @@ public class Player : NetworkBehaviour, IKitchenObjectParent
 
         float moveDistance = moveSpeed * Time.deltaTime;
         float playerRadius = .7f;
-        float playerHeight = 2f;
-        bool canMove = !Physics.CapsuleCast(transform.position, transform.position + Vector3.up * playerHeight, playerRadius, moveDir, moveDistance);
+        bool canMove = !Physics.BoxCast(transform.position, Vector3.one * playerRadius, moveDir, Quaternion.identity, moveDistance, collisonsLayerMask);
 
         if (!canMove)
         {
             Vector3 moveDirX = Vector3.right * moveDir.x;
             moveDirX = moveDirX.normalized;
-            canMove = Mathf.Abs(moveDir.x) >= .5f && !Physics.CapsuleCast(transform.position, transform.position + Vector3.up * playerHeight, playerRadius, moveDirX, moveDistance);
+            canMove = Mathf.Abs(moveDir.x) >= .5f && !Physics.BoxCast(transform.position, Vector3.one * playerRadius, moveDirX, Quaternion.identity, moveDistance, collisonsLayerMask);
             if (canMove)
             {
                 moveDir = moveDirX;
@@ -103,7 +106,7 @@ public class Player : NetworkBehaviour, IKitchenObjectParent
             {
                 Vector3 moveDirZ = Vector3.forward * moveDir.z;
                 moveDirZ = moveDirZ.normalized;
-                canMove = Mathf.Abs(moveDir.z) >= .5f && !Physics.CapsuleCast(transform.position, transform.position + Vector3.up * playerHeight, playerRadius, moveDirZ, moveDistance);
+                canMove = Mathf.Abs(moveDir.z) >= .5f && !Physics.BoxCast(transform.position, Vector3.one * playerRadius, moveDirZ, Quaternion.identity, moveDistance, collisonsLayerMask);
                 if (canMove)
                 {
                     moveDir = moveDirZ;
