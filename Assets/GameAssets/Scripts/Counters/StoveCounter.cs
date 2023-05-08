@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 
 public class StoveCounter : BaseCounter, IHasProgress
@@ -21,16 +22,52 @@ public class StoveCounter : BaseCounter, IHasProgress
     [SerializeField] private FryingRecipeSO[] fryingRecipeSOArray;
     [SerializeField] private BurningRecipeSO[] burningRecipeSOArray;
 
-    private State currentState;
+    private NetworkVariable<State> currentState = new NetworkVariable<State>(State.Idle);
 
-    private float fryingTimer;
-    private float burningTimer;
+    private NetworkVariable<float> fryingTimer = new NetworkVariable<float>(0f);
+    private NetworkVariable<float> burningTimer = new NetworkVariable<float>(0f);
     private FryingRecipeSO fryingRecipeSO;
     private BurningRecipeSO burningRecipeSO;
 
-    private void Start()
+    public override void OnNetworkSpawn()
     {
-        currentState = State.Idle;
+        fryingTimer.OnValueChanged += FryingTimer_OnValueChanged;
+        burningTimer.OnValueChanged += BurningTimer_OnValueChanged;
+        currentState.OnValueChanged += CurrentState_OnValueChanged;
+    }
+
+    private void CurrentState_OnValueChanged(State previousValue, State newValue)
+    {
+        OnStateChange?.Invoke(this, new OnStateChangeEventArgs
+        {
+            state = currentState.Value
+        });
+
+        if(currentState.Value == State.Burned || currentState.Value == State.Idle)
+        {
+            OnProgressChanged?.Invoke(this, new IHasProgress.OnProgressChangedEventArgs
+            {
+                progressNormalized = 0f
+            });
+        }
+    }
+    private void BurningTimer_OnValueChanged(float previousValue, float newValue)
+    {
+        float burningTimerMax = burningRecipeSO != null ? burningRecipeSO.burningTimerMax : 1f;
+
+        OnProgressChanged?.Invoke(this, new IHasProgress.OnProgressChangedEventArgs
+        {
+            progressNormalized = burningTimer.Value / burningTimerMax
+        });
+    }
+    private void FryingTimer_OnValueChanged(float previousValue, float newValue)
+    {
+        float fryingTimerMax = fryingRecipeSO != null ? fryingRecipeSO.fryingTimerMax : 1f;
+
+        OnProgressChanged?.Invoke(this, new IHasProgress.OnProgressChangedEventArgs
+        {
+            progressNormalized = fryingTimer.Value / fryingTimerMax
+        });
     }
 
     private void Update()
@@ -38,55 +75,40 @@ public class StoveCounter : BaseCounter, IHasProgress
         
         if(HasKitchenObject())
         {
-            switch (currentState)
+            if (!IsServer) return;
+
+            switch (currentState.Value)
             {
                 case State.Idle:
                     break;
                 case State.Frying:
-                    fryingTimer += Time.deltaTime;
+                    fryingTimer.Value += Time.deltaTime;
 
-                    OnProgressChanged?.Invoke(this, new IHasProgress.OnProgressChangedEventArgs
+                    
+                    if (fryingTimer.Value > fryingRecipeSO.fryingTimerMax)
                     {
-                        progressNormalized = fryingTimer / fryingRecipeSO.fryingTimerMax
-                    });
-
-                    if (fryingTimer > fryingRecipeSO.fryingTimerMax)
-                    {
-                        GetKitchenObject().DestroySelf();
+                        KitchenObject.DestroyKitchenObject(GetKitchenObject());
                         KitchenObject.SpawnKitchenObject(fryingRecipeSO.output, this);
-                        burningTimer = 0f;
+                        burningTimer.Value = 0f;
 
-                        currentState = State.Fried;
-                        OnStateChange?.Invoke(this, new OnStateChangeEventArgs
-                        {
-                            state = currentState
-                        });
+                        currentState.Value = State.Fried;
 
-                        burningRecipeSO = GetBurningRecipeWithInput(GetKitchenObject().GetKitchenObjectSO());
+
+                        SetBurningRecipeSOClientRpc(
+                            KitchenGameMultiplayer.Instance.GetKitchenObjectSOIndex(GetKitchenObject().GetKitchenObjectSO())
+                        );
                     }
                     break;
                 case State.Fried:
-                    burningTimer += Time.deltaTime;
+                    burningTimer.Value += Time.deltaTime;
 
-                    OnProgressChanged?.Invoke(this, new IHasProgress.OnProgressChangedEventArgs
+                    
+                    if (burningTimer.Value > burningRecipeSO.burningTimerMax)
                     {
-                        progressNormalized = burningTimer / burningRecipeSO.burningTimerMax
-                    });
-
-                    if (burningTimer > burningRecipeSO.burningTimerMax)
-                    {
-                        GetKitchenObject().DestroySelf();
+                        KitchenObject.DestroyKitchenObject(GetKitchenObject());
                         KitchenObject.SpawnKitchenObject(burningRecipeSO.output, this);
 
-                        currentState = State.Burned;
-                        OnStateChange?.Invoke(this, new OnStateChangeEventArgs
-                        {
-                            state = currentState
-                        });
-                        OnProgressChanged?.Invoke(this, new IHasProgress.OnProgressChangedEventArgs
-                        {
-                            progressNormalized = 1
-                        });
+                        currentState.Value = State.Burned;
                     }
                     break;
                 case State.Burned:
@@ -105,16 +127,12 @@ public class StoveCounter : BaseCounter, IHasProgress
             {
                 if (HasRecipeWithInput(player.GetKitchenObject().GetKitchenObjectSO()))
                 {
-                    player.GetKitchenObject().SetKitchenObjectParent(this);
-                    fryingRecipeSO = GetFryingRecipeWithInput(GetKitchenObject().GetKitchenObjectSO());
+                    KitchenObject kitchenObject = player.GetKitchenObject();
+                    kitchenObject.SetKitchenObjectParent(this);
 
-                    currentState = State.Frying;
-                    OnStateChange?.Invoke(this, new OnStateChangeEventArgs
-                    {
-                        state = currentState
-                    });
-
-                    fryingTimer = 0f;
+                    InteractLogicPlaceObjectOnCounterServerRpc(
+                        KitchenGameMultiplayer.Instance.GetKitchenObjectSOIndex(kitchenObject.GetKitchenObjectSO())
+                    );
                 }
             }
         }
@@ -126,18 +144,10 @@ public class StoveCounter : BaseCounter, IHasProgress
                 {
                     if(plateKitchenObject.TryAddIngredients(GetKitchenObject().GetKitchenObjectSO()))
                     {
-                        GetKitchenObject().DestroySelf();
+                        KitchenObject.DestroyKitchenObject(GetKitchenObject());
 
-                        currentState = State.Idle;
-                        OnStateChange?.Invoke(this, new OnStateChangeEventArgs
-                        {
-                            state = currentState
-                        });
-
-                        OnProgressChanged?.Invoke(this, new IHasProgress.OnProgressChangedEventArgs
-                        {
-                            progressNormalized = 0
-                        });
+                        currentState.Value = State.Idle;
+                        
                     }
                     
                 }
@@ -146,21 +156,39 @@ public class StoveCounter : BaseCounter, IHasProgress
             {
                 GetKitchenObject().SetKitchenObjectParent(player);
 
-                currentState = State.Idle;
-                OnStateChange?.Invoke(this, new OnStateChangeEventArgs
-                {
-                    state = currentState
-                });
-
-                OnProgressChanged?.Invoke(this, new IHasProgress.OnProgressChangedEventArgs
-                {
-                    progressNormalized = 0
-                });
+                SetStateIdleServerRpc();
 
             }
         }
     }
 
+    [ServerRpc(RequireOwnership = false)]
+
+    private void SetStateIdleServerRpc()
+    {
+        currentState.Value = State.Idle;
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void InteractLogicPlaceObjectOnCounterServerRpc(int kitchenObjectSOIndex)
+    {
+        fryingTimer.Value = 0f;
+        currentState.Value = State.Frying;
+
+        SetFryingRecipeSOClientRpc(kitchenObjectSOIndex);
+    }
+    [ClientRpc]
+    private void SetFryingRecipeSOClientRpc(int kitchenObjectSOIndex)
+    {
+        KitchenObjectSO kitchenObjectSO = KitchenGameMultiplayer.Instance.GetKitchenObjectSOFromIndex(kitchenObjectSOIndex);
+        fryingRecipeSO = GetFryingRecipeWithInput(kitchenObjectSO);
+    }
+    [ClientRpc]
+    private void SetBurningRecipeSOClientRpc(int kitchenObjectSOIndex)
+    {
+        KitchenObjectSO kitchenObjectSO = KitchenGameMultiplayer.Instance.GetKitchenObjectSOFromIndex(kitchenObjectSOIndex);
+        burningRecipeSO = GetBurningRecipeWithInput(kitchenObjectSO);
+    }
     private bool HasRecipeWithInput(KitchenObjectSO input)
     {
         FryingRecipeSO fryingRecipeSO = GetFryingRecipeWithInput(input);
@@ -202,6 +230,6 @@ public class StoveCounter : BaseCounter, IHasProgress
 
     public bool IsFried()
     {
-        return currentState == State.Fried;
+        return currentState.Value == State.Fried;
     }
 }
