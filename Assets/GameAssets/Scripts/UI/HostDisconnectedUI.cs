@@ -12,7 +12,7 @@ public class HostDisconnectedUI : MonoBehaviour
     {
         playAgainButton.onClick.AddListener(() =>
         {
-
+            Loader.Load(Loader.Scene.MainMenuScene);
         });
     }
 
