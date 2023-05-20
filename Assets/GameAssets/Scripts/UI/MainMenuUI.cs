@@ -6,21 +6,23 @@ using UnityEngine.UI;
 
 public class MainMenuUI : MonoBehaviour
 {
-    [SerializeField] private Button playButton;
-    [SerializeField] private Button optionsButton;
+    [SerializeField] private Button playMultiplayerButton;
+    [SerializeField] private Button playSingleplayerButton;
     [SerializeField] private Button quitButton;
 
     private void Awake()
     {
-        playButton.onClick.AddListener(() =>
+        playMultiplayerButton.onClick.AddListener(() =>
         {
+            KitchenGameMultiplayer.isPlayingMultiplayer = true;
             Loader.Load(Loader.Scene.LobbyScene);
         });
 
-        /*optionsButton.onClick.AddListener(() =>
+        playSingleplayerButton.onClick.AddListener(() =>
         {
-
-        });*/
+            KitchenGameMultiplayer.isPlayingMultiplayer = false;
+            Loader.Load(Loader.Scene.LobbyScene);
+        });
 
         quitButton.onClick.AddListener(() =>
         {
@@ -31,6 +33,6 @@ public class MainMenuUI : MonoBehaviour
 
     private void Start()
     {
-        playButton.Select();
+        playMultiplayerButton.Select();
     }
 }
